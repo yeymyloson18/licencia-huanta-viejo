@@ -17,7 +17,7 @@ flowchart TB
         Workers["Workers<br/>[Contenedor: Node.js, mismo código del backend]<br/>PDF de esquelas y licencias, QR, correos y SMS<br/>envían todos los mensajes salvo el OTP<br/>entregan los eventos pendientes (outbox)"]
         Cola["Cola de tareas<br/>[Contenedor]"]
         Redis[("Caché<br/>[Contenedor: Redis]<br/>catálogo, estados y contadores de intentos")]
-        BD[("Base de datos<br/>[Contenedor: PostgreSQL]<br/>primaria + réplica con conmutación automática")]
+        BD[("Base de datos<br/>[Contenedor: PostgreSQL]<br/>primaria + 2 réplicas con conmutación automática")]
         Obj[("Almacén de documentos<br/>[Contenedor]<br/>PDF, planos y fotos")]
     end
 
@@ -56,9 +56,9 @@ flowchart TB
 | Chatbot (Fase 2) | Servicio conectado a la API | Responder con datos del catálogo. | ADR-003 |
 | Balanceador de carga | Servicio cloud o Nginx | Repartir las solicitudes entre las instancias. | ADR-005 |
 | Backend API | Node.js + NestJS | Monolito modular con Clean Architecture; incluye el módulo Seguridad y Usuarios (JWT + OTP, roles, límite de intentos); sin estado para poder replicarse. | ADR-001, ADR-003, ADR-007 |
-| Workers + cola | Node.js + cola de tareas | PDF de esquelas y licencias, QR, y envío de correos y SMS en segundo plano. Envían todos los mensajes, salvo el código OTP, que la API envía directo. Además leen la tabla `eventos_pendientes` (outbox) y, como se ejecutan con el mismo código del backend, ejecutan el caso de uso de Trámites que avanza el expediente; si falla, lo reintentan. | ADR-005 |
+| Workers + cola | Node.js + cola de tareas | PDF de esquelas y licencias, QR, y envío de correos y SMS en segundo plano. Envían todos los mensajes, salvo el código OTP, que la API envía directo. Además leen la tabla `eventos_pendientes` (outbox) y, como se ejecutan con el mismo código del backend, ejecutan el caso de uso de Trámites que avanza el expediente; si falla, lo reintentan. Toman los eventos con `FOR UPDATE SKIP LOCKED` y Trámites ignora un evento ya procesado (idempotencia). | ADR-005 |
 | Caché | Redis | Catálogo, estado de trámites y contadores de intentos. La clave se borra cuando la receta o el estado cambian. | ADR-005, ADR-007 |
-| Base de datos | PostgreSQL con réplica y conmutación automática | Toda la información del sistema, incluido el registro de auditoría. | ADR-001, ADR-005 |
+| Base de datos | PostgreSQL con dos réplicas y conmutación automática | Toda la información del sistema, incluido el registro de auditoría. | ADR-001, ADR-005 |
 | Almacén de documentos | Almacenamiento de objetos | Archivos pesados fuera de la base de datos. | ADR-005 |
 
 Las tecnologías son **propuestas**: la arquitectura no depende de ellas gracias a Clean Architecture.

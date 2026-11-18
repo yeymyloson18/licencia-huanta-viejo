@@ -35,7 +35,7 @@ src/modulos/pagos/
 export interface DatosEsquela {           // forma en que la esquela se guarda y se lee
   codigo: string;
   numeroExpediente: string;
-  monto: number;
+  monto: number;                         // en céntimos: 15950 = S/ 159.50
   numeroRecibo: string | null;
 }
 
@@ -43,12 +43,12 @@ export class Esquela {
   private constructor(
     readonly codigo: string,
     readonly numeroExpediente: string,
-    readonly monto: number,               // viene del catálogo, nunca se escribe a mano
+    readonly monto: number,               // en céntimos y desde el catálogo; nunca se escribe a mano
     private numeroRecibo: string | null,
   ) {}
 
   static nueva(codigo: string, numeroExpediente: string, monto: number): Esquela {
-    if (monto <= 0) throw new Error('Una esquela debe tener un monto mayor que cero');
+    if (!Number.isInteger(monto) || monto <= 0) throw new Error('El monto debe ser un número entero de céntimos mayor que cero');
     return new Esquela(codigo, numeroExpediente, monto, null);
   }
 
@@ -61,6 +61,7 @@ export class Esquela {
   }
 
   registrarPago(numeroRecibo: string): void {
+    if (!numeroRecibo.trim()) throw new Error('Falta el número de recibo');
     if (this.numeroRecibo) throw new Error('Esta esquela ya fue pagada');   // regla: se paga una sola vez
     this.numeroRecibo = numeroRecibo;
   }
@@ -91,7 +92,7 @@ export interface RepositorioEsquelas {
 }
 
 export interface ConsultaTasa {            // la tasa vive solo en el catálogo (ADR-002)
-  tasaDe(codigoReceta: string): Promise<number>;
+  tasaDe(codigoReceta: string): Promise<number>;   // en céntimos
 }
 
 export interface GeneradorDocumentos {
@@ -120,7 +121,10 @@ export class GenerarEsquela {
   // Se llama solo cuando el nivel de riesgo ya está confirmado (ADR-004)
   async ejecutar(numeroExpediente: string, codigoReceta: string): Promise<Esquela> {
     const existente = await this.esquelas.buscarPorExpediente(numeroExpediente);
-    if (existente) return existente;                                         // una sola esquela por expediente
+    if (existente) {                                                         // una sola esquela por expediente
+      if (!existente.estaPagada()) await this.documentos.generarPdfEsquela(existente);   // vuelve a armar el PDF (p. ej., se perdió)
+      return existente;
+    }
     const monto = await this.catalogo.tasaDe(codigoReceta);                  // RF05: tasa del TUPA
     const esquela = Esquela.nueva(Esquela.generarCodigo(numeroExpediente), numeroExpediente, monto);
     const creada = await this.esquelas.guardarNueva(esquela);
@@ -196,7 +200,7 @@ export class RepositorioEsquelasEnMemoria implements RepositorioEsquelas {
 }
 
 export class ConsultaTasaEnMemoria implements ConsultaTasa {
-  private tasas = new Map<string, number>([['LIC-01', 159.50], ['LIC-03', 305.90]]);   // TUPA 2024
+  private tasas = new Map<string, number>([['LIC-01', 15950], ['LIC-03', 30590]]);   // TUPA 2024, en céntimos
   async tasaDe(codigoReceta: string) {
     const tasa = this.tasas.get(codigoReceta);
     if (tasa === undefined) throw new Error('Receta sin tasa en el catálogo');
@@ -218,7 +222,7 @@ export class PublicadorEventosEnMemoria implements PublicadorEventos {
 
 ```sql
 -- guardarNueva: atómico, un expediente nunca tiene dos esquelas (UNIQUE sobre numero_expediente)
-INSERT INTO esquelas (codigo, numero_expediente, monto) VALUES ($1, $2, $3)
+INSERT INTO esquelas (codigo, numero_expediente, monto_centimos) VALUES ($1, $2, $3)   -- monto_centimos INTEGER
 ON CONFLICT (numero_expediente) DO NOTHING;
 -- 1 fila insertada = esquela creada (true); 0 filas = el expediente ya tenía esquela (false)
 
@@ -237,6 +241,10 @@ el pago quedaría registrado pero el expediente no avanzaría. En producción se
 2. Los **workers** leen la tabla `eventos_pendientes` y entregan el evento a Trámites; si falla, lo reintentan.
 3. En ese diseño, el caso de uso **ya no llama a `publicar()`**, así el evento no se entrega dos veces.
 4. En la **misma transacción** se guarda también la fila de auditoría del pago (RF25); se omite abajo para que la sentencia se lea fácil.
+5. Un evento puede entregarse **más de una vez** (por ejemplo, si el worker cae justo después de procesarlo). Por eso Trámites es
+   **idempotente**: guarda el id del evento en `eventos_procesados` en la misma transacción en que avanza el expediente y, si el id
+   ya existe, no hace nada. Así un reintento nunca emite dos licencias. Varios workers no toman el mismo evento gracias a
+   `FOR UPDATE SKIP LOCKED`.
 
 ```sql
 -- Si el UPDATE no actualiza ninguna fila (ya estaba pagada), el INSERT no guarda nada
@@ -245,10 +253,24 @@ WITH pago AS (
   WHERE codigo = $1 AND numero_recibo IS NULL
   RETURNING codigo, numero_expediente, numero_recibo
 )
-INSERT INTO eventos_pendientes (tipo, datos)
-SELECT 'PagoRegistrado',
+INSERT INTO eventos_pendientes (id, tipo, datos)
+SELECT gen_random_uuid(), 'PagoRegistrado',
        json_build_object('codigoEsquela', codigo, 'numeroExpediente', numero_expediente, 'numeroRecibo', numero_recibo)
 FROM pago;
+```
+
+```sql
+-- Worker: toma eventos que ningún otro worker está procesando
+SELECT id, tipo, datos FROM eventos_pendientes
+WHERE entregado_en IS NULL
+ORDER BY creado_en
+LIMIT 10
+FOR UPDATE SKIP LOCKED;
+
+-- Trámites, en la misma transacción en que avanza el expediente
+INSERT INTO eventos_procesados (id_evento) VALUES ($1)
+ON CONFLICT (id_evento) DO NOTHING;
+-- 0 filas insertadas = evento repetido: no se avanza el expediente ni se emite otra licencia
 ```
 
 ## 4. Composición (único lugar que elige los adaptadores)
@@ -268,10 +290,10 @@ const generar = new GenerarEsquela(repo, new ConsultaTasaEnMemoria(), new Genera
 const registrar = new RegistrarPagoEnCaja(repo, eventos);
 
 const esquela = await generar.ejecutar('EXP-2026-0001', 'LIC-01');   // riesgo bajo: S/ 159.50 del catálogo
-console.log(esquela.codigo, esquela.monto);                          // ESQ-EXP-2026-0001 159.5
+console.log(esquela.codigo, esquela.monto);                          // ESQ-EXP-2026-0001 15950 (S/ 159.50)
 
 const otraVez = await generar.ejecutar('EXP-2026-0001', 'LIC-01');   // se pide de nuevo (p. ej., se perdió el PDF)
-console.log(otraVez.codigo === esquela.codigo);                      // true: la misma esquela, nunca una segunda
+console.log(otraVez.codigo === esquela.codigo);                      // true: la misma esquela, nunca una segunda (su PDF se vuelve a encolar)
 
 // Dos cajeros registran la MISMA esquela al mismo tiempo
 const resultados = await Promise.allSettled([
@@ -298,6 +320,9 @@ console.log(leida?.estaPagada());                  // true: al leerla de nuevo s
 | Adaptadores intercambiables (LSP) | El contrato exige que `guardarNueva` y `guardarPago` sean atómicos; el adaptador en memoria y el de PostgreSQL lo cumplen, por eso se cambian sin tocar los casos de uso. |
 | Límite entre módulos | Pagos no toca el `Expediente`: publica `PagoRegistrado` y Trámites reacciona. |
 | Cómo evitar perder el evento | El ejemplo publica directo para ser simple; en producción se usaría outbox (nota de la sección 3). |
+| Dinero sin errores de redondeo | Los montos se manejan en céntimos enteros (`15950` = S/ 159.50); en PostgreSQL, columna `INTEGER`. |
+| Esquela recuperable | Si se vuelve a pedir una esquela no pagada, `GenerarEsquela` encola otra vez su PDF. |
+| Eventos sin efectos duplicados | En producción, Trámites procesa `PagoRegistrado` de forma idempotente (`eventos_procesados`, sección 3). |
 | Se prueba sin base de datos | Todo el ejemplo funciona en memoria. |
 
 **Fuera de este ejemplo** (están en el diseño interno de módulos): la pantalla de confirmación del cajero

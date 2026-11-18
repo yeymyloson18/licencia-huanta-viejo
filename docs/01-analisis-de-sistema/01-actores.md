@@ -4,7 +4,7 @@
 
 | Actor | ¿Qué necesita realizar? |
 |---|---|
-| Administrado (persona o empresa) | Saber qué licencia le corresponde, confirmar su identidad (RUC más DNI o carné de extranjería, y un código enviado a su celular), presentar la solicitud con sus documentos, obtener la esquela de pago, consultar el estado del trámite (con su número de expediente y su DNI/RUC) y descargar su licencia digital. |
+| Administrado (persona o empresa) | Saber qué licencia le corresponde, confirmar su identidad (RUC más DNI o carné de extranjería, y un código enviado a su celular), presentar la solicitud con sus documentos, obtener la esquela de pago, consultar el estado del trámite (con su número de expediente, su DNI/RUC y el código de consulta de su cargo) y descargar su licencia digital. |
 | Personal de mesa de partes | Atender presencialmente, registrar solicitudes de quienes no usan internet y verificar documentos. |
 | Evaluador | Revisar expedientes, confirmar o corregir el nivel de riesgo y aprobar, observar o denegar solicitudes. |
 | Inspector ITSE | Consultar sus inspecciones asignadas y registrar el resultado con fotos desde su celular, con conexión a internet. |

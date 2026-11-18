@@ -60,5 +60,5 @@ flowchart LR
 4. Notificaciones solo encola; los workers envían los correos y SMS (ADR-005). Excepción: Seguridad envía el OTP directo.
 5. Las tareas diarias del Reloj de plazos y del aviso ITSE corren una sola vez al día, con un bloqueo en PostgreSQL (ADR-006).
 6. Dentro de cada componente se aplica Clean Architecture (ADR-003); ese detalle se ve en el Nivel 4.
-7. `PagoRegistrado` se guarda en la tabla `eventos_pendientes` junto con el pago; los workers lo entregan a Trámites (outbox).
+7. `PagoRegistrado` se guarda en la tabla `eventos_pendientes` junto con el pago; los workers lo entregan a Trámites (outbox), que lo procesa de forma idempotente (tabla `eventos_procesados`).
 8. Cada componente guarda su registro de auditoría en sus propias tablas (RF25).

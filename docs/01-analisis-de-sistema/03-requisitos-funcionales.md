@@ -5,7 +5,7 @@
 |---|---|
 | RF01 | El sistema debe proponer el tipo de licencia mediante un asistente de tres preguntas basado en reglas. |
 | RF02 | El sistema debe mostrar los requisitos, la tasa y el plazo de la licencia propuesta, leídos del catálogo. |
-| RF03 | El sistema debe permitir consultar el estado del trámite ingresando juntos el número de expediente y el DNI/RUC del solicitante, con un límite de intentos fallidos. |
+| RF03 | El sistema debe permitir consultar el estado del trámite ingresando juntos el número de expediente, el DNI/RUC del solicitante y el código de consulta aleatorio impreso en el cargo de presentación, con un límite de intentos fallidos. |
 
 ## Solicitud digital
 | ID | Requisito funcional |
@@ -29,7 +29,7 @@
 | RF12 | El sistema debe permitir al personal de caja registrar el pago de una esquela con su código y el número de recibo; antes de guardar, muestra el expediente, el titular y el monto para que el cajero confirme. |
 | RF13 | El sistema debe emitir la licencia digital con un código QR verificable públicamente. |
 | RF14 | El sistema debe registrar el certificado ITSE con su fecha de vencimiento y avisar antes de que venza. |
-| RF15 | El sistema debe gestionar los trámites conectados: transferencia, cambio de giro y duplicado. |
+| RF15 | El sistema debe gestionar los trámites conectados: transferencia, cambio de giro, duplicado y cese de actividades. |
 
 ## Administración, seguridad y reportes
 | ID | Requisito funcional |

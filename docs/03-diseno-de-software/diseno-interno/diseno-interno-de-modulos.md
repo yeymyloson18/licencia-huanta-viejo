@@ -21,11 +21,11 @@ src/modulos/<modulo>/
 |---|---|---|---|---|
 | **Seguridad y Usuarios** | `Usuario`, `Rol`, `CodigoOTP`. Regla: un código OTP vence a los 5 minutos y admite 5 intentos. | `IniciarSesion`, `VerificarOTP`, `EnviarCodigoAdministrado`, `VerificarCodigoAdministrado`, `GestionarUsuario`, `AsignarRol` | `RepositorioUsuarios`, `EnviadorOTP` | `RepositorioUsuariosPostgres`, `EnviadorOtpSms` (envío directo, sin cola: es la única excepción porque la persona espera el código en ese momento, sea el personal al iniciar sesión o el administrado al confirmar su celular) |
 | **Catálogo y Asistente de ruta** | `Receta`, `Requisito`, `Ruta` (A, B, C), `Tasa`, `PlazoDiasHabiles`. | `ProponerLicencia`, `ConsultarReceta`, `ActualizarReceta` (administrador) | `RepositorioCatalogo` | `RepositorioCatalogoPostgres` + `RepositorioCatalogoConCache` (Redis, patrón Decorator; al actualizar una receta borra su clave) |
-| **Trámites** | `Expediente` (incluye la dirección, el giro y la zona del local, que usan los reportes), `Documento`, `EstadoExpediente`, `NumeroExpediente`, `DniRuc`. Reglas: el administrado consulta solo con número de expediente **y** DNI/RUC; una solicitud en línea solo se registra con la identidad validada y el celular confirmado. | `RegistrarSolicitud`, `ObservarExpediente`, `SubsanarObservacion`, `ConfirmarNivelRiesgo`, `AprobarEvaluacion`, `DenegarExpediente`, `ConsultarEstado` | `RepositorioExpedientes`, `ValidadorIdentidad`, `AlmacenDocumentos`, `CacheEstados` | `RepositorioExpedientesPostgres`, `AdaptadorValidacionDniRuc` (RUC, DNI con fecha de emisión o carné de extranjería; también los del representante legal o apoderado), `AlmacenObjetos`, `CacheEstadosRedis` (borra la clave cuando cambia el estado) |
-| **Pagos en caja** | `Esquela` (código `ESQ-<expediente>`, monto y número de recibo). Reglas: un expediente tiene una sola esquela; una esquela solo se paga una vez; solo una esquela pagada admite corregir su número de recibo. | `GenerarEsquela` (si el expediente ya tiene esquela, devuelve la misma), `ConsultarEsquela` (caja: devuelve expediente, monto y si ya está pagada), `RegistrarPagoEnCaja`, `CorregirNumeroRecibo` (jefatura, con motivo) | `RepositorioEsquelas` (con `guardarNueva` y `guardarPago` atómicos), `ConsultaTasa`, `GeneradorDocumentos`, `PublicadorEventos` | `RepositorioEsquelasPostgres`, `ConsultaTasaCatalogo`, `GeneradorPdf` (worker), `PublicadorEventosNest` |
+| **Trámites** | `Expediente` (incluye la dirección, el giro y la zona del local, que usan los reportes), `Documento`, `EstadoExpediente`, `NumeroExpediente`, `DniRuc`. Reglas: el administrado consulta solo con número de expediente, DNI/RUC **y** código de consulta (aleatorio, se genera al presentar); una solicitud en línea solo se registra con la identidad validada y el celular confirmado. | `RegistrarSolicitud`, `ObservarExpediente`, `SubsanarObservacion`, `ConfirmarNivelRiesgo`, `AprobarEvaluacion`, `DenegarExpediente`, `ConsultarEstado`, `ConsultarTitular` (solo rol caja), `ProcesarPagoRegistrado` (idempotente) | `RepositorioExpedientes`, `ValidadorIdentidad`, `AlmacenDocumentos`, `CacheEstados` | `RepositorioExpedientesPostgres` (DNI/RUC cifrado con AES-256 y con índice de búsqueda HMAC), `AdaptadorValidacionDniRuc` (RUC, DNI con fecha de emisión o carné de extranjería; también los del representante legal o apoderado), `AlmacenObjetos`, `CacheEstadosRedis` (borra la clave cuando cambia el estado) |
+| **Pagos en caja** | `Esquela` (código `ESQ-<expediente>`, monto en céntimos enteros y número de recibo obligatorio). Reglas: un expediente tiene una sola esquela; una esquela solo se paga una vez; solo una esquela pagada admite corregir su número de recibo. | `GenerarEsquela` (si el expediente ya tiene esquela, devuelve la misma y, si aún no está pagada, vuelve a encolar su PDF), `ConsultarEsquela` (caja: devuelve expediente, monto y si ya está pagada), `RegistrarPagoEnCaja`, `CorregirNumeroRecibo` (jefatura, con motivo) | `RepositorioEsquelas` (con `guardarNueva` y `guardarPago` atómicos), `ConsultaTasa`, `GeneradorDocumentos`, `PublicadorEventos` | `RepositorioEsquelasPostgres`, `ConsultaTasaCatalogo`, `GeneradorPdf` (worker), `PublicadorEventosNest` |
 | **Inspecciones** | `Inspeccion`, `ResultadoITSE`, `Foto`. Regla: una inspección tiene un solo inspector. | `AsignarInspeccion`, `RegistrarResultadoITSE` | `RepositorioInspecciones`, `AlmacenDocumentos` | `RepositorioInspeccionesPostgres`, `AlmacenObjetos` |
-| **Licencias** | `Licencia`, `CertificadoITSE`, `CodigoQR`, `Vigencia`. Regla: solo se emite cuando Trámites lo solicita, y Trámites lo solicita solo con el pago registrado (salvo la ruta C, que es gratuita). | `EmitirLicencia`, `EmitirLicenciaProvisional`, `VerificarLicenciaPublica`, `AvisarVencimientoITSE` (tarea diaria con bloqueo, ADR-006) | `RepositorioLicencias`, `GeneradorDocumentos` | `RepositorioLicenciasPostgres`, `GeneradorPdfQr` (worker) |
-| **Reloj de plazos** | `Plazo`, `Feriado`. Regla: se cuentan solo días hábiles. | `VerificarPlazos` (tarea diaria con bloqueo, ADR-006), `RegistrarFeriado` (administrador) | `CalendarioHabil`, `ConsultaExpedientes` (solo lectura) | `CalendarioFeriadosPostgres`, `ConsultaExpedientesTramites` (usa la fachada de Trámites) |
+| **Licencias** | `Licencia`, `CertificadoITSE`, `CodigoQR`, `Vigencia`. Regla: solo se emite cuando Trámites lo solicita, y Trámites lo solicita solo con el pago registrado (salvo la ruta C, que es gratuita). | `EmitirLicencia`, `EmitirLicenciaProvisional`, `DejarSinEfecto` (cese de actividades), `VerificarLicenciaPublica`, `AvisarVencimientoITSE` (tarea diaria con bloqueo, ADR-006) | `RepositorioLicencias`, `GeneradorDocumentos` | `RepositorioLicenciasPostgres`, `GeneradorPdfQr` (worker) |
+| **Reloj de plazos** | `Plazo`, `Feriado`. Regla: se cuentan solo días hábiles; también vigila el plazo de la ITSE posterior (9 días hábiles en la ruta A, 6 meses en la ruta C). | `VerificarPlazos` (tarea diaria con bloqueo, ADR-006), `RegistrarFeriado` (administrador) | `CalendarioHabil`, `ConsultaExpedientes` (solo lectura) | `CalendarioFeriadosPostgres`, `ConsultaExpedientesTramites` (usa la fachada de Trámites) |
 | **Notificaciones** | `Mensaje`, `Canal`. | `NotificarCambioEstado`, `NotificarVencimiento` | `Notificador` | `NotificadorEnCola` (deja el mensaje en la cola; el worker lo envía con `NotificadorCorreoSMS`) |
 | **Reportes** | `Indicador`. | `GenerarTablero`, `GenerarReporte` | `ConsultaExpedientes`, `ConsultaPagos`, `ConsultaLicencias` (solo lectura) | Adaptadores que usan las fachadas de Trámites, Pagos en caja y Licencias |
 
@@ -34,7 +34,7 @@ src/modulos/<modulo>/
 1. **Llamada directa:** un módulo usa la **fachada pública** de otro (por ejemplo, Trámites llama a `ModuloPagos.generarEsquela(numeroExpediente, codigoReceta)`). Nunca accede a sus repositorios ni a sus tablas.
 2. **Puertos hacia otros módulos:** cuando un caso de uso necesita un dato de otro módulo, lo pide mediante un contrato propio (`ConsultaTasa`, `ConsultaExpedientes`); el adaptador de ese contrato llama a la fachada del otro módulo.
 3. **Eventos de dominio:** cuando algo importante ocurre, el módulo publica un evento y otros reaccionan:
-   - `PagoRegistrado` (entregado por los workers mediante outbox) → Trámites marca el expediente como pagado y lo avanza; en la ruta A, emite la licencia automáticamente.
+   - `PagoRegistrado` (entregado por los workers mediante outbox) → Trámites marca el expediente como pagado y lo avanza; en la ruta A, emite la licencia automáticamente. Lo procesa de forma idempotente (ver «Para que el evento no se pierda»).
    - `ResultadoITSERegistrado` → Trámites emite o deniega según la ruta.
    - `EstadoExpedienteCambiado` → Notificaciones encola el aviso al administrado.
 
@@ -48,7 +48,7 @@ y cuándo. Se guarda en la **misma transacción** que la operación, así no hay
 | Pagos en caja | Registro del pago y corrección del número de recibo (con el motivo) |
 | Trámites | Confirmación o corrección del nivel de riesgo, aprobación, observación y denegación |
 | Inspecciones | Registro del resultado ITSE |
-| Licencias | Emisión de la licencia |
+| Licencias | Emisión de la licencia y cese de actividades |
 
 La jefatura consulta la auditoría desde el Portal, en la pantalla de cada módulo: el controlador de cada módulo
 la expone en solo lectura para el rol jefatura. Así ningún módulo lee las tablas de otro.
@@ -85,7 +85,7 @@ stateDiagram-v2
 
 - **Ruta A:** cuando caja registra el pago, el sistema emite la licencia automáticamente (calificación automática, dentro de los 2 días hábiles). Después, Inspecciones programa la **ITSE posterior** (hasta 9 días hábiles); el certificado se renueva cada 2 años. Si la ITSE posterior es **desfavorable**, el sistema registra el resultado, avisa a la jefatura y deriva el caso a fiscalización (fuera del alcance del sistema).
 - **Ruta B:** primero la evaluación previa (el evaluador confirma o corrige el riesgo), luego la esquela y el pago, después la ITSE previa. Si el evaluador corrige el riesgo, el expediente toma la receta del nuevo nivel **antes** de generar la esquela, así el monto pagado siempre coincide. Todo esto está dentro de los 8 días hábiles del TUPA.
-- **Ruta C:** solo para bodegas de hasta 50 m², de riesgo bajo, en el primer o segundo piso de una vivienda y con conformidad de zonificación. Licencia provisional gratuita de 12 meses; la ITSE se realiza dentro de los primeros 6 meses. Al vencer la provisional, la definitiva se emite de forma automática y gratuita dentro de 10 días calendario (TUPA, pág. 388). Si es desfavorable, se deriva a fiscalización igual que en la ruta A.
+- **Ruta C:** solo para bodegas de hasta 50 m², de riesgo bajo, en el primer o segundo piso de una vivienda y con conformidad de zonificación. Licencia provisional gratuita de 12 meses; la ITSE se realiza dentro de los primeros 6 meses. Al vencer la provisional, la definitiva se emite de forma automática y gratuita dentro de 10 días calendario (TUPA, pág. 388). Si es desfavorable, se deriva a fiscalización igual que en la ruta A. Si pasan los 6 meses sin resultado ITSE, el Reloj de plazos alerta a la jefatura para programarla de inmediato.
 
 ## Ejemplo de flujo interno: pago en caja
 
@@ -93,7 +93,7 @@ stateDiagram-v2
 1. Riesgo confirmado: verificación de requisitos (ruta A) o evaluación previa aprobada (ruta B)
 2. Trámites llama a ModuloPagos.generarEsquela(numeroExpediente, codigoReceta)
      → GenerarEsquela (aplicación)
-     → RepositorioEsquelas.buscarPorExpediente(expediente)   // si ya existe, devuelve la misma esquela
+     → RepositorioEsquelas.buscarPorExpediente(expediente)   // si ya existe, devuelve la misma esquela (y vuelve a encolar su PDF si no está pagada)
      → ConsultaTasa.tasaDe(codigoReceta)          // la tasa sale del catálogo
      → Código: ESQ-<expediente> (uno por expediente)
      → RepositorioEsquelas.guardarNueva(esquela)  // atómico: UNIQUE por expediente
@@ -101,7 +101,7 @@ stateDiagram-v2
 3. El administrado paga en la caja de la Municipalidad.
 4. El cajero ingresa el código de la esquela y el Portal muestra:
      → expediente, monto y si ya está pagada: pagos.controller → ConsultarEsquela (aplicación)
-     → titular del expediente: tramites.controller → ConsultarEstado (solo lectura; para el rol caja no pide DNI y solo devuelve el titular)
+     → titular del expediente: tramites.controller → ConsultarTitular (solo lectura y solo para el rol caja; devuelve únicamente el nombre del titular)
      → el cajero confirma que corresponde a la persona que pagó
      (el Portal junta ambos datos, así Pagos no depende de Trámites)
 5. pagos.controller (rol caja) → RegistrarPagoEnCaja (aplicación)
@@ -116,6 +116,9 @@ stateDiagram-v2
 **Para que el evento no se pierda (en producción):** en lugar del paso `publicar()`, el pago y el evento
 `PagoRegistrado` se guardan **en una sola operación** de PostgreSQL, y el evento **solo** se guarda si el pago se
 registró (queda en la tabla `eventos_pendientes`). Los **workers**, que se ejecutan con el mismo código del backend,
-leen esa tabla y ejecutan el caso de uso de Trámites que avanza el expediente; si falla, lo reintentan. Así nunca hay un pago registrado con el expediente detenido, ni un evento de un
+leen esa tabla y ejecutan el caso de uso de Trámites que avanza el expediente; si falla, lo reintentan. Para que un reintento no avance
+el expediente dos veces (ni emita dos licencias), cada evento lleva un id único y `ProcesarPagoRegistrado` lo guarda en la tabla
+`eventos_procesados` (UNIQUE) en la misma transacción en que avanza el expediente; si el id ya estaba, no hace nada. Si hay varios
+workers, cada uno toma eventos distintos con `SELECT ... FOR UPDATE SKIP LOCKED`. Así nunca hay un pago registrado con el expediente detenido, ni un evento de un
 pago que no ocurrió. A esta técnica se le llama **outbox**. El ejemplo de `tecnologia/README.md` publica directo
 para ser simple.

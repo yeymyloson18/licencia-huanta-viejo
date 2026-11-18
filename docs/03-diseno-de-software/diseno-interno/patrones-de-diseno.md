@@ -32,7 +32,10 @@ export class RutaA implements RutaTramite {
     if (!e.riesgoConfirmado()) return PasoTramite.VERIFICAR_REQUISITOS;
     if (!e.estaPagado()) return PasoTramite.ESPERAR_PAGO_EN_CAJA;
     if (!e.licenciaEmitida()) return PasoTramite.EMITIR_LICENCIA;
-    if (!e.tieneResultadoITSE()) return PasoTramite.PROGRAMAR_ITSE_POSTERIOR;
+    if (!e.tieneResultadoITSE()) {
+      return e.vencioPlazoITSE() ? PasoTramite.ALERTAR_ITSE_VENCIDA     // 9 días hábiles sin ITSE
+                                 : PasoTramite.PROGRAMAR_ITSE_POSTERIOR;
+    }
     if (!e.itseFavorable()) return PasoTramite.DERIVAR_A_FISCALIZACION;   // la licencia ya existe
     return PasoTramite.FINALIZADO;
   }
@@ -55,7 +58,10 @@ export class RutaB implements RutaTramite {
 export class RutaC implements RutaTramite {
   siguientePaso(e: Expediente): PasoTramite {
     if (!e.licenciaEmitida()) return PasoTramite.EMITIR_LICENCIA_PROVISIONAL;
-    if (!e.tieneResultadoITSE()) return PasoTramite.PROGRAMAR_ITSE_EN_6_MESES;
+    if (!e.tieneResultadoITSE()) {
+      return e.vencioPlazoITSE() ? PasoTramite.ALERTAR_ITSE_VENCIDA     // 6 meses sin ITSE
+                                 : PasoTramite.PROGRAMAR_ITSE_EN_6_MESES;
+    }
     if (!e.itseFavorable()) return PasoTramite.DERIVAR_A_FISCALIZACION;
     if (!e.cumplio12Meses()) return PasoTramite.ESPERAR_12_MESES;
     if (!e.licenciaDefinitivaEmitida()) return PasoTramite.EMITIR_LICENCIA_DEFINITIVA;
@@ -65,6 +71,8 @@ export class RutaC implements RutaTramite {
 ```
 
 **ITSE posterior desfavorable (rutas A y C):** la licencia ya fue emitida, así que el sistema no la anula por sí solo: registra el resultado, avisa a la jefatura y deriva el caso a **fiscalización**, que está fuera del alcance del sistema.
+
+`vencioPlazoITSE()` compara la fecha de hoy con la fecha límite de la ITSE que calcula el Reloj de plazos; `ALERTAR_ITSE_VENCIDA` avisa a la jefatura para que la programe de inmediato.
 
 `estaPagado()` es un dato del propio `Expediente` (módulo Trámites): se marca cuando llega el evento `PagoRegistrado`. Trámites nunca lee las tablas de Pagos.
 

@@ -18,7 +18,7 @@ flowchart TB
     Msg["Servicio de correo y SMS<br/>[Sistema externo]"]
     WA["WhatsApp Business API<br/>[Sistema externo - Fase 2]"]
 
-    Adm -->|"confirma su identidad, presenta, consulta con expediente + DNI/RUC, descarga su esquela y su licencia"| Sis
+    Adm -->|"confirma su identidad, presenta, consulta con expediente + DNI/RUC + código de consulta, descarga su esquela y su licencia"| Sis
     Per -->|"registra solicitudes presenciales y evalúa expedientes"| Sis
     Insp -->|"registra el resultado de la ITSE"| Sis
     Caja -->|"registra el pago de la esquela"| Sis

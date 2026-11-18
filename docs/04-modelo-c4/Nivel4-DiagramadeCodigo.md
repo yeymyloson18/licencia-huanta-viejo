@@ -11,7 +11,7 @@ classDiagram
     class Esquela {
         +codigo: string
         +numeroExpediente: string
-        +monto: number
+        +monto: number en céntimos
         -numeroRecibo: string o null
         +nueva(codigo, numeroExpediente, monto)$ Esquela
         +reconstruir(datos)$ Esquela
@@ -114,16 +114,16 @@ classDiagram
 | **Presentación** | `PagosController` (solo el rol de caja puede registrar pagos) |
 
 **Reglas del dominio:**
-- `Esquela.registrarPago()` rechaza el registro si la esquela ya fue pagada.
+- `Esquela.registrarPago()` rechaza el registro si la esquela ya fue pagada o si el número de recibo está vacío.
 - `Esquela.reconstruir()` crea la esquela leída de la base **con su número de recibo**, así una esquela pagada sigue pagada.
 - `guardarNueva()` y `guardarPago()` deben ser **atómicos**: si se pide la esquela dos veces a la vez, solo se crea una (en PostgreSQL: `INSERT ... ON CONFLICT (numero_expediente) DO NOTHING`); si dos cajeros registran la misma esquela a la vez, solo uno lo logra (`UPDATE ... WHERE numero_recibo IS NULL`).
-- El monto **no se recibe desde afuera**: `GenerarEsquela` lo pide al catálogo mediante `ConsultaTasa` (RF05, ADR-002).
-- Un expediente tiene **una sola esquela**: el código es `ESQ-<expediente>`, con una restricción UNIQUE sobre el número de expediente. Si se vuelve a pedir, `GenerarEsquela` devuelve la misma esquela, así nadie paga dos veces.
+- El monto **no se recibe desde afuera**: `GenerarEsquela` lo pide al catálogo mediante `ConsultaTasa` (RF05, ADR-002). Se maneja en céntimos enteros para evitar errores de redondeo.
+- Un expediente tiene **una sola esquela**: el código es `ESQ-<expediente>`, con una restricción UNIQUE sobre el número de expediente. Si se vuelve a pedir, `GenerarEsquela` devuelve la misma esquela (y vuelve a encolar su PDF si aún no está pagada), así nadie paga dos veces.
 - La esquela se genera solo con el nivel de riesgo confirmado, así el monto siempre coincide con la licencia.
 
 **Versión de producción:** el diagrama muestra la versión simple, en la que `RegistrarPagoEnCaja` llama a `PublicadorEventos`.
 En producción se usa **outbox**: el pago y el evento `PagoRegistrado` se guardan juntos en la tabla `eventos_pendientes` y los
-workers lo entregan a Trámites (como muestran los niveles 2 y 3).
+workers lo entregan a Trámites (como muestran los niveles 2 y 3), que lo procesa de forma idempotente para que un reintento no avance el expediente dos veces.
 
 **Límite del módulo:** `Expediente` **no aparece** aquí porque pertenece al módulo Trámites. Pagos no lo
 modifica: solo publica `PagoRegistrado`, y Trámites reacciona marcando su expediente como pagado.

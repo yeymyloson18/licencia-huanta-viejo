@@ -127,10 +127,10 @@ flowchart LR
 
 Fuente: TUPA 2024 de la Municipalidad Provincial de Huanta. Plazos en días hábiles.
 
-**Trámites conectados (RF15):** la transferencia, el cambio de giro y el duplicado no son recetas nuevas. El catálogo guarda
+**Trámites conectados (RF15):** la transferencia, el cambio de giro, el duplicado y el cese de actividades no son recetas nuevas. El catálogo guarda
 además, con su propio código, la tasa y los requisitos que el TUPA fija para cada uno. Cada trámite conectado es un expediente
-nuevo, con su propia esquela, y sigue un camino corto: verificación de requisitos, esquela, pago en caja y emisión, sin ITSE nueva. Si un cambio de giro cambia el nivel de riesgo,
-se tramita como una licencia nueva.
+nuevo, con su propia esquela (salvo el cese, que es gratuito), y sigue un camino corto: verificación de requisitos, esquela, pago en caja y emisión, sin ITSE nueva. Si un cambio de giro cambia el nivel de riesgo,
+se tramita como una licencia nueva. El **cese de actividades** es gratuito y de aprobación automática: no genera esquela y, al presentarlo, la licencia queda sin efecto.
 
 **Regla para que la tasa siempre coincida:** la esquela se genera **después** de confirmar el nivel de riesgo
 (en la verificación de requisitos de la ruta A o al terminar la evaluación previa de la ruta B). Si el evaluador
@@ -144,6 +144,12 @@ caja registra el pago, sin esperar otra decisión del evaluador.
 
 **Espera del pago (rutas A y B):** los días que el expediente espera el pago en caja dependen del administrado; si se descuentan
 o no del plazo es un punto **por validar con la Municipalidad**.
+
+**Variante si se confirma D1 (pago antes de presentar):** según el TUPA, en la aprobación automática la solicitud se considera
+aprobada al presentarla. Si la Municipalidad confirma que el riesgo se determina y se paga **antes** de presentar, el orden sería:
+asistente → determinación del riesgo → esquela → pago en caja → presentación con la constancia de pago → en la ruta A, licencia
+emitida al presentar. Habría que ajustar el ciclo de vida del expediente, la estrategia `RutaA`, el ADR-004 y el escenario EQ-05.
+Los módulos, el catálogo y el componente Pagos en caja no cambian: solo cambia el momento en que se llama a `GenerarEsquela`.
 
 ## Descripción
 
@@ -159,7 +165,7 @@ o no del plazo es un punto **por validar con la Municipalidad**.
 |---|---|
 | Servidor de aplicación | Mínimo 2 instancias del backend; se agregan más en los picos (de 1,000 a 10,000 usuarios). |
 | Balanceador de carga | Reparte las solicitudes entre las instancias. |
-| Base de datos | PostgreSQL primaria con réplica en espera, conmutación automática y copias diarias. |
+| Base de datos | PostgreSQL primaria con dos réplicas en espera (síncronas por quórum: basta que una confirme), conmutación automática y copias diarias. |
 | Caché | Redis para el catálogo, el estado de los trámites y los contadores de intentos. |
 | Cola y workers | Generan los PDF de esquelas y licencias, los QR, envían correos y SMS y entregan los eventos pendientes (outbox), en segundo plano. |
 | Almacén de documentos | Guarda PDF, planos y fotos de inspección. |

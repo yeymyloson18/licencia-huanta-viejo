@@ -88,7 +88,7 @@ flowchart TB
 4. No hay pagos digitales: **Pagos en caja** genera una sola esquela por expediente (rutas A y B) y registra el pago que hace el personal de caja. La ruta C es gratuita y no genera esquela.
 5. **Notificaciones** no envía directamente: arma el mensaje y lo deja en la cola; los **workers** lo envían. **Excepción:** el código OTP lo envía Seguridad directamente, porque la persona lo espera en ese momento (inicio de sesión del personal o confirmación de identidad del administrado).
 6. Las tareas diarias (Reloj de plazos y aviso ITSE) corren **una sola vez al día** aunque haya varias instancias, gracias a un bloqueo en PostgreSQL (ADR-006).
-7. **Outbox:** Pagos guarda el pago y el evento `PagoRegistrado` en la misma operación (tabla `eventos_pendientes`). Los workers se ejecutan con el **mismo código del backend**, leen esa tabla y ejecutan el caso de uso de Trámites que avanza el expediente; si falla, lo reintentan.
+7. **Outbox:** Pagos guarda el pago y el evento `PagoRegistrado` en la misma operación (tabla `eventos_pendientes`). Los workers se ejecutan con el **mismo código del backend**, leen esa tabla y ejecutan el caso de uso de Trámites que avanza el expediente; si falla, lo reintentan. Como un evento puede llegar más de una vez, Trámites lo procesa de forma **idempotente**: guarda el id del evento en `eventos_procesados` (UNIQUE) en la misma transacción en que avanza el expediente y, si ya existe, no hace nada (así nunca se emiten dos licencias). Varios workers toman eventos distintos con `FOR UPDATE SKIP LOCKED`.
 8. **Auditoría:** cada módulo guarda en su propia tabla quién hizo cada operación importante y cuándo (RF25), en la misma transacción que la operación.
 
 ## Responsabilidades y trazabilidad de cada componente
@@ -102,7 +102,7 @@ flowchart TB
 | **Pagos en caja** | Genera una sola esquela por expediente con código único, registra el pago hecho en caja, permite a la jefatura corregir un número de recibo y guarda la auditoría de los pagos. | HU04, HU13, HU17 · RF11, RF12, RF24, RF25 | DA04 · ADR-004 | EQ-04 |
 | **Inspecciones** | Agenda la ITSE, asigna el inspector, guarda el resultado con fotos desde el celular y su auditoría. | HU08 · RF10, RF25 | DA01 · ADR-002 | EQ-04 |
 | **Licencias** | Emite la licencia con QR (con auditoría), controla vigencias y, con una tarea diaria, avisa la renovación del ITSE. | HU06, HU11 · RF13, RF14, RF25 | DA01 · ADR-002 | EQ-04 |
-| **Reloj de plazos** | Cuenta días hábiles con el calendario de feriados y alerta antes de cada vencimiento. | HU09, HU16 · RF08, RF23 | DA05 · ADR-006 | EQ-07 |
+| **Reloj de plazos** | Cuenta días hábiles con el calendario de feriados y alerta antes de cada vencimiento, incluido el plazo de la ITSE posterior (rutas A y C). | HU09, HU16 · RF08, RF23 | DA05 · ADR-006 | EQ-07 |
 | **Notificaciones** | Arma los avisos y los encola; los workers envían correos y SMS. | HU05, HU09, HU11 · RF20 | DA02 · ADR-005 | EQ-02 |
 | **Reportes** | Tablero de jefatura: lee, sin modificar, expedientes (Trámites), ingresos (Pagos en caja) y licencias e ITSE por vencer (Licencias). | HU10 · RF18, RF19 | DA02 · ADR-005 | EQ-01 |
 

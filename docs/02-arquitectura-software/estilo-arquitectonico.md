@@ -68,7 +68,7 @@ flowchart TD
         end
     end
 
-    BD[("PostgreSQL<br/>primaria + réplica<br/>conmutación automática")]
+    BD[("PostgreSQL<br/>primaria + 2 réplicas<br/>conmutación automática")]
     Cache[("Redis")]
     Obj[("Almacén de documentos y fotos")]
     Cola["Cola + workers<br/>PDF, QR, correos, SMS<br/>y eventos pendientes"]
